@@ -1,0 +1,146 @@
+Stores
+A store is a logical view of a storage location for checked-in files. A store typically comprises, among other features, an FCS URL and a storage path (which can be considered to be the default location.) Only FCS manages stores.
+
+To create a new store to replace an existing one, you must change the policies referencing the old store to reference the new one. This ensures that all new files checked into objects governed by the policies are placed in the new store.
+
+With replicated stores, a store can be distributed using asynchronous replication—where data is duplicated to all mirrored locations only when commands are passed telling the database to do so. In this case, when files are checked in, they are written to the store location that is part of the user's preferred site, or if no match is found, to the store's default location. Files are not replicated to alternate locations until specifically told to do so.
+
+A multi-site installation is a deployment containing at least two sites and two locations with replicated stores. See Replication. Store replication makes sense when a deployment spans through network links with low bandwidth or high latency, or both.
+
+Note: The host parameter is not used when the file protocol is defined with the FCS URL in the store. Instead, the store is created on the system to which the FCS URL belongs. Although the inventory result may show the host as the one defined in the store, this should be ignored as the store is actually created on the system on which the FCS URL is running.
+
+
+
+Sites
+Sites comprise a set of locations. A site is an administrative object that refers to one or more locations. A site can be added to the definition of a person or group object. When associated with a person, the site defines the list of locations preferred by a particular person. When associated with a group, the site defines the list of locations preferred by all members of the group. Only System Administrators can create sites. Sites are required primarily when using multiple, distributed FCSs for performance purposes, leading to a need for replication. Refer to MQL Concepts for more information.
+
+In addition, you can configure a File Collaboration Server to optimize the performance of file check-in and checkout in a replicated environment.
+
+
+
+The Preferred Site
+When a client machine requests a file checkin/checkout operation, the FCS first determines the preferred site for the client machine based on:
+
+The preference set in the user's person or group definition.
+If not set in the user's person or group definition, the preference set in the user's role definition.
+To improve performance, the preferred site for the user is cached throughout the user session. If you want to suppress this caching behavior, use the following setting:
+
+MX_SUPPRESS_SITE_CACHE
+When files are accessed via an 3DSpace Service, the server's initialization file (enovia.ini) should contain the following to set the preference for all of its users:
+
+MX_SITE_PREFERENCE = SITENAME
+where SITENAME is the name of the site object.
+
+The MX_SITE_PREFERENCE is optional and is normally not set. This setting overrides the setting in the person, group, or role definition for the site preference, and should be set to the site local to the server.
+
+The Studio Customization Toolkit includes an API that allows implementors to override this setting in specific instances. See the Studio Customization Toolkit Programmer's Reference Guide (JavaDoc) for more information.
+
+
+
+Locations
+A location references alternate FCSs to be used by a store when distributing and replicating files. The location specifies the URL of an FCS and a storage path.
+
+Think of a location as another store--it is defined as a UNC location. The same rules apply as in specifying a store.
+
+Locations contain alternate host and path information for a captured store. The host and path information in the store definition is considered to be the default location for the store, while any associated location objects identify alternate file servers.
+
+Each location must have a name unique in the database. The name can be up to 127 characters and can contain spaces. Because names are so flexible, you should assign a name that has meaning to both you and your users.
+
+After you have created locations, assign them to captured stores. Any number of locations can be associated with a captured store.
+
+
+
+Synchronization of Stores and Locations
+Synchronization of a store using one of its locations is the process of updating the store's files using the location's files. Synchronization of a location using its store is the process of updating the location's files using the store's files. Synchronization on demand is a synchronization process that is triggered by a checkout user request. If the user checks out at least one file that is not up-to-date in their preferred location, this checkout request triggers a synchronization of that preferred location. FCS compressed synchronization can improve FCS server synchronization performance in a WAN environment. For MQL commands to enable and configure compressed synchronization, see MQL Concepts.
+
+
+
+FCS Disk Space Consumption Optimization
+You can have more than one store/location prefix used for file write operations at the same time.
+
+The list of prefixes in write mode can be defined by providing a comma-separated list of prefix to the mod store/mod location command:
+
+mod store store_name prefix 'prefix_name(,prefix_name)' ;
+mod location store_name prefix 'prefix_name(,prefix_name)' ;
+For example:
+
+mod store TSTMultiPrefixStore prefix 'PFix1,PFix2,PFix3,PFix4,PFix5' ;
+mod location TSTMultiPrefixLocation_Fr prefix 'PFix1,PFix2,PFix3,PFix4,PFix5' ;
+File dispatching rules:
+
+Files are dispatched over prefix in write mode depending on available disk space. The more available disk space you have under a prefix, the more that prefix will be used to write files. The choice of the prefix is made synchronously when creating a new file in the store/location path. For each file, we check if the cache containing disk usage of the different prefix exists. If there is already only one, we check if its last update is older than the ematrix.fcs.prefix_usage_refresh value, and update it in this case.
+
+If it does not exist, we create a new one and update it. If the prefix list has changed, it also is updated.
+
+Example: Case with three store/location prefixes : PF1, PF2, PF3
+
+Assumptions:
+
+Free disk space for PF1 is 250 GB
+Free disk space for PF2 is 250 GB
+Free disk space for PF3 is 500 GB
+Prefix PF3 will be chosen twice more than PF1 or PF2.
+
+Two properties can be defined on FCS server side in the framework.properties file in admtoistrate the algorithm defined above:
+
+ematrix.fcs.prefix_usage_thresholds
+
+This property is used to define a threshold over which a prefix is no longer eligible for file write operations if there is at least one remaining prefix eligible for file write operations. The threshold can be defined as a used disk space percentage or an absolute value of remaining free disk space (unit: MiB mebibyte). There is a default percentage which is set at 90%.
+
+Example: percentage of used disk space:
+
+ematrix.fcs.prefix_usage_thresholds = 80%
+
+Example: absolute value of remaining free disk space:
+
+ematrix.fcs.prefix_usage_thresholds = 1000
+
+Example: both percentage and absolute value, the first condition verified makes the prefix no longer eligible for file write operations unless it is the last prefix eligible.
+
+ematrix.fcs.prefix_usage_thresholds = 80%, 1000
+
+When there is no longer a prefix eligible for file write operations (threshold condition reached on all of them), then all of them become eligible again.
+
+ematrix.fcs.prefix_usage_refresh
+
+Minimum delay between two free disk space computations on prefixes (unit seconds).
+
+A default value is set for this parameter to 60s.
+
+Specific traces for prefix choice are printed when the standard FCS traces are enabled.
+
+It is also possible to active the traces only for the prefix choice by adding this line in the logback.xml file after the root logger:
+
+<logger name="FCS.Prefix" level="DEBUG"/>
+
+Limitation: In case of large file API use (hardlink based checkin/checkout), do not define a prefix list with more than one single element.
+
+
+
+MQL Store and Location Commands Updates for Disk Space Consumption and Optimization
+You can use a prefix with a store or location to make multiple stores or locations available for write operations. To do so, use this syntax:
+
+mod store STORE_NAME prefix 'PREFIX_NAME(,PREFIX_NAME)';
+mod location LOCATION_NAME prefix 'PREFIX_NAME(,PREFIX_NAME)';
+You can include a comma-separated list of prefixes with this command. For example:
+
+mod store MultiPrefixStore prefix 'PFix1,PFix2,PFix3,PFix4,PFix5' ;
+mod location MultiPrefixLocation_Fr prefix 'PFix1,PFix2,PFix3,PFix4,PFix5' ;
+When writing files to disk, the apps use the store or location with the most available disk space. The prefix works with these properties in the FCS side Framework.properties file:
+
+ematrix.fcs.prefix_usage_thresholds: defines the percent threshold over which that prefix will not be used for writing files as long as there is another prefix eligible. The value for this property can be in percentage (default is 80%), absolute value of remaining disk space (measured in mebibytes), or percentage, absolute value . For example:ematrix.fcs.prefix_usage_thresholds=80%,1000
+Any prefix that exceeds the threshold is not eligible for writing. If all prefixes have exceeded the threshold, then all of the prefixes become eligible for writing.
+
+ematrix.fcs.prefix_usage_refresh: defines the minimum delay between 2 free disk space computations on prefixes (in seconds, default = 60 seconds).
+You can also execute an MQL command to clear the prefix for a store or location using this syntax:
+
+emptyprefix store STORE_NAME prefix 'PREFIX_NAME' commit N;
+emptyprefix location LOCATION_NAME prefix 'PREFIX_NAME commit N;
+N is the number of distinct files and is optional. If not specified, 100 is used.
+
+Clearing the prefix results in copying files stored under that prefix to other eligible prefixes (results in a new hashname for the file), and then deleting the file in the cleared prefix. The copy location for the files is determined the same was as when writing new files (described above).
+
+You cannot stop and restart the
+
+emptyprefix
+command. If the prefix does not exist, no error occurs and the command does nothing.
